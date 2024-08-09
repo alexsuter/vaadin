@@ -1,119 +1,92 @@
 package com.example.application.views.channel;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse.BodyHandlers;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Comparator;
 
-import org.apache.commons.lang3.StringUtils;
-import org.jsoup.Jsoup;
-
+import com.example.application.views.channel.JobsCrawler.Job;
+import com.vaadin.flow.component.applayout.AppLayout;
+import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.grid.GridSortOrderBuilder;
+import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.orderedlayout.Scroller;
+import com.vaadin.flow.component.sidenav.SideNav;
+import com.vaadin.flow.component.sidenav.SideNavItem;
+import com.vaadin.flow.data.renderer.LitRenderer;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 
 @Route("")
-public class ChannelView extends VerticalLayout {
+public class ChannelView extends AppLayout {
 
-    public ChannelView() throws IOException, InterruptedException {
-      setSizeFull();
+    public ChannelView() {
 
-      var builds = new BuildCrawler().go();
+      DrawerToggle toggle = new DrawerToggle();
 
+      H1 title = new H1("Axon Ivy Product Listing");
+      title.getStyle().set("font-size", "var(--lumo-font-size-l)")
+              .set("margin", "0");
+
+      SideNav nav = getSideNav();
+
+      Scroller scroller = new Scroller(nav);
+      scroller.setClassName(LumoUtility.Padding.SMALL);
+
+      addToDrawer(scroller);
+      addToNavbar(toggle, title);
+
+
+      var builds = new BuildsCrawler("https://jenkins.ivyteam.io/job/core_product/").get();
       var pages =  builds.parallelStream()
-              .flatMap(b -> new Cralwer().go(b.url).parallelStream())
+              .flatMap(b -> new JobsCrawler(b).get().parallelStream())
               .toList();
 
-      var grid = new Grid<Page>();
-      //grid.setHeightFull();
+      var grid = new Grid<Job>();
       grid.setItems(pages);
-      grid.addColumn(Page::text).setHeader("Text");
-      grid.addColumn(Page::url).setHeader("Url");
-      add(grid);
-    }
-
-    public record Person(String name) {
-
-    }
-
-    public record Build(String url) {}
-
-    public record Page(String text, String url) {}
 
 
-    public static class BuildCrawler {
+      var nameColumn = grid
+        .addColumn(Job::name)
+        .setHeader("Name")
+        .setWidth("10%")
+        .setSortable(false)
+        .setComparator(new Comparator<Job>() {
 
-      public List<Build> go() throws IOException, InterruptedException {
-        var url = "https://jenkins.ivyteam.io/job/core_product/";
-
-        var pages = new ArrayList<Build>();
-
-        try (var client = HttpClient.newHttpClient()) {
-          var request = HttpRequest.newBuilder(URI.create(url)).build();
-          var content = client.send(request, BodyHandlers.ofString()).body();
-
-          var jsoup = Jsoup.parse(content);
-          var a = jsoup.getElementsByTag("a");
-
-          for (var b : a) {
-            var name = b.attr("title");
-            if (name.contains("master") || name.contains("release")) {
-              var u = url + b.attr("href") + "lastSuccessfulBuild/";
-              pages.add(new Build(u));
+          @Override
+          public int compare(Job o1, Job o2) {
+            if (o2.name().equals("master")) {
+              return 1;
             }
-          }
-
-
-          return pages;
-        }
-      }
-    }
-
-    public static class Cralwer {
-
-      public List<Page> go(String url) {
-
-        var pages = new ArrayList<Page>();
-
-        try (var client = HttpClient.newHttpClient()) {
-          var request = HttpRequest.newBuilder(URI.create(url)).build();
-          var content = client.send(request, BodyHandlers.ofString()).body();
-
-          var jsoup = Jsoup.parse(content);
-          var a = jsoup.getElementsByTag("a");
-
-          for (var b : a) {
-
-            var href = b.attr("href");
-            if (href.contains("AxonIvy") && href.endsWith(".zip") && !href.contains("Repository")) {
-              var u = url + href;
-              var text = StringUtils.substringAfterLast(href, "/");
-              var page = new Page(text, u);
-              pages.add(page);
+            if (o1.name().equals("master")) {
+              return -1;
             }
-
-            //$href = $child->getAttribute('href');
-            //if (str_contains($href, "AxonIvy") && str_ends_with($href, '.zip') && !str_contains($href, "Repository")) {
-            //  $text = basename($href);
-            //  $url = $baseUrl . $href;
-            //  $link = new ProductLink($text, $url);
-            //  $productLinks[] = $link;
-            //}
-
-//            var name = b.attr("title");
-//            if (name.contains("master") || name.contains("release")) {
-//              var u = url + b.attr("href") + "lastSuccessfulBuild/";
-//              pages.add(new Page(u));
-//            }
+            var v1 = Double.parseDouble(o1.name());
+            var v2 = Double.parseDouble(o2.name());
+            return (int) v2 - (int) v1;
           }
+        });
 
-          return pages;
-        } catch (IOException | InterruptedException ex) {
-          throw new RuntimeException(ex);
-        }
-      }
+
+      var sortOrder = new GridSortOrderBuilder<Job>();
+      sortOrder.thenAsc(nameColumn);
+      grid.sort(sortOrder.build());
+
+      grid.addColumn(LitRenderer.<Job>of("""
+                 <a href="${item.url}">${item.text}</a>
+              """)
+              .withProperty("url", p -> p.url())
+              .withProperty("text", p -> p.text())
+      ).setHeader("Link")
+      .setWidth("90%");
+
+      grid.setHeightFull();
+      setContent(grid);
+
     }
+
+    private SideNav getSideNav() {
+      var sideNav = new SideNav();
+      sideNav.addItem(new SideNavItem("Downloads", "/", VaadinIcon.DASHBOARD.create()));
+      return sideNav;
+  }
 }
