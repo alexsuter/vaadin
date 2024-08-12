@@ -1,7 +1,8 @@
-package com.example.application.views.channel;
+package com.axonivy.product.listing.crawler;
 
 import java.io.IOException;
-import java.net.URI;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,21 +10,26 @@ import org.jsoup.Jsoup;
 
 public class BuildsCrawler {
 
-  private final String url;
+  private final InputStream in;
+  private final String baseUrl;
 
-  public BuildsCrawler(String url) {
-    this.url = url;
+  public BuildsCrawler(InputStream in, String baseUrl) {
+    this.in = in;
+    this.baseUrl = baseUrl;
   }
 
   public List<Build> get() {
+    if (in == null) {
+      return List.of();
+    }
     var builds = new ArrayList<Build>();
     try {
-      var doc = Jsoup.parse(URI.create(url).toURL(), 2000);
+      var doc = Jsoup.parse(in, StandardCharsets.UTF_8.name(), baseUrl);
       var aTags = doc.getElementsByTag("a");
       for (var aTag : aTags) {
         var title = aTag.attr("title");
         if (title.contains("master") || title.contains("release")) {
-          var link = url + aTag.attr("href") + "lastSuccessfulBuild/";
+          var link = aTag.absUrl("href") + "lastSuccessfulBuild/";
           builds.add(new Build(link));
         }
       }
