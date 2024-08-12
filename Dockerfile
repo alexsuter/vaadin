@@ -13,7 +13,7 @@ COPY . /build
 RUN mvn -f /build/pom.xml -Pproduction -Pnative native:compile
 
 # create runtime container
-FROM scratch
-COPY --from=build /build/target/product-listing-service /service
-ENTRYPOINT ["/service"]
+FROM ubuntu:24.04
+COPY --from=build /build/target/product-listing-service /
+CMD ["/product-listing-service"]
 EXPOSE 8080
